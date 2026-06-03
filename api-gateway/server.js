@@ -94,11 +94,6 @@ app.use('/api/auth/login',           authLimiter);
 app.use('/api/auth/forgot-password', authLimiter);
 app.use('/api/auth/register',        authLimiter);
 
-// ── Body parser ───────────────────────────────────────────────────────────────
-// The gateway itself parses JSON only for health/swagger routes;
-// the 50 kb cap prevents outsized payload attacks reaching downstream services.
-app.use(express.json({ limit: '50kb' }));
-
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/health', async (req, res) => {
   const checks = await Promise.allSettled(
@@ -207,33 +202,41 @@ app.get('/api-docs', swaggerUi.setup(null, {
 // Each route is forwarded to the appropriate downstream microservice.
 // The proxy middleware measures round-trip time and logs gateway overhead
 // separately from service latency to aid performance diagnosis.
+function restreamJsonBody(proxyReq, req) {
+  if (!req.body || !['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return;
+
+  const bodyData = JSON.stringify(req.body);
+  proxyReq.setHeader('Content-Type', 'application/json');
+  proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+  proxyReq.write(bodyData);
+}
+
 const proxyOpts = (target, serviceName) => ({
   target,
   changeOrigin: true,
   proxyTimeout: 10000,  // give up after 10s waiting for the downstream service
-  on: {
-    proxyReq: (_proxyReq, req) => {
-      req._svcStart = process.hrtime.bigint();
-      req._svcName  = serviceName;
-    },
-    proxyRes: (proxyRes, req) => {
-      const svcMs    = Number(process.hrtime.bigint() - (req._svcStart || process.hrtime.bigint())) / 1e6;
-      const gwMs     = Number(process.hrtime.bigint() - (req._gwStart  || process.hrtime.bigint())) / 1e6;
-      const overhead = gwMs - svcMs;
-      console.log(
-        `[GW→${req._svcName}] ${req.method} ${req.url} ${proxyRes.statusCode}` +
-        ` | svc=${svcMs.toFixed(1)}ms  gw-overhead=${overhead.toFixed(1)}ms`
-      );
-    },
-    error: (err, req, res) => {
-      const ms = req._svcStart
-        ? (Number(process.hrtime.bigint() - req._svcStart) / 1e6).toFixed(0)
-        : '?';
-      console.error(`[GW→${serviceName}] ERROR after ${ms}ms: ${err.message}`);
-      if (!res.headersSent) {
-        res.status(502).json({ error: `${serviceName} service unavailable`, detail: err.message });
-      }
-    },
+  onProxyReq: (proxyReq, req) => {
+    req._svcStart = process.hrtime.bigint();
+    req._svcName  = serviceName;
+    restreamJsonBody(proxyReq, req);
+  },
+  onProxyRes: (proxyRes, req) => {
+    const svcMs    = Number(process.hrtime.bigint() - (req._svcStart || process.hrtime.bigint())) / 1e6;
+    const gwMs     = Number(process.hrtime.bigint() - (req._gwStart  || process.hrtime.bigint())) / 1e6;
+    const overhead = gwMs - svcMs;
+    console.log(
+      `[GW→${req._svcName}] ${req.method} ${req.url} ${proxyRes.statusCode}` +
+      ` | svc=${svcMs.toFixed(1)}ms  gw-overhead=${overhead.toFixed(1)}ms`
+    );
+  },
+  onError: (err, req, res) => {
+    const ms = req._svcStart
+      ? (Number(process.hrtime.bigint() - req._svcStart) / 1e6).toFixed(0)
+      : '?';
+    console.error(`[GW→${serviceName}] ERROR after ${ms}ms: ${err.message}`);
+    if (!res.headersSent) {
+      res.status(502).json({ error: `${serviceName} service unavailable`, detail: err.message });
+    }
   },
 });
 
@@ -244,6 +247,11 @@ app.use('/api/inspections',   createProxyMiddleware(proxyOpts(SERVICES.extinguis
 app.use('/api/maintenance',   createProxyMiddleware(proxyOpts(SERVICES.extinguishers, 'extinguishers')));
 app.use('/api/reports',       createProxyMiddleware(proxyOpts(SERVICES.reports,       'reports')));
 app.use('/api/notifications', createProxyMiddleware(proxyOpts(SERVICES.notifications, 'notifications')));
+
+// ── Body parser ───────────────────────────────────────────────────────────────
+// Keep this after proxy routes so proxied requests reach services with their
+// original body stream intact.
+app.use(express.json({ limit: '50kb' }));
 
 app.get('/', (req, res) => {
   res.json({

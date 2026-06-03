@@ -24,20 +24,12 @@ function getInitials(firstName, lastName) {
   return `${(firstName || '').charAt(0)}${(lastName || '').charAt(0)}`.toUpperCase();
 }
 
-function validatePassword(password) {
-  if (!password || password.length < 8) return 'Password must be at least 8 characters.';
-  if (!/[A-Z]/.test(password)) return 'Password must contain an uppercase letter.';
-  if (!/[a-z]/.test(password)) return 'Password must contain a lowercase letter.';
-  if (!/[0-9]/.test(password)) return 'Password must contain a number.';
-  return null;
-}
-
 function formatDate(dateString) {
   if (!dateString) return '—';
   return new Date(dateString).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-const EMPTY_CREATE = { first_name: '', last_name: '', email: '', role: 'inspector', password: '', confirm_password: '' };
+const EMPTY_CREATE = { first_name: '', last_name: '', email: '', role: 'inspector' };
 const EMPTY_EDIT = { first_name: '', last_name: '', email: '', role: 'user' };
 
 export default function UsersPage() {
@@ -101,13 +93,6 @@ export default function UsersPage() {
     if (!addForm.last_name.trim()) errors.last_name = 'Last name is required.';
     if (!addForm.email.trim()) errors.email = 'Email is required.';
     if (!addForm.role) errors.role = 'Role is required.';
-    const pwErr = validatePassword(addForm.password);
-    if (pwErr) errors.password = pwErr;
-    if (!addForm.confirm_password) {
-      errors.confirm_password = 'Please confirm the password.';
-    } else if (addForm.password !== addForm.confirm_password) {
-      errors.confirm_password = 'Passwords do not match.';
-    }
     return errors;
   }
 
@@ -122,9 +107,8 @@ export default function UsersPage() {
         last_name: addForm.last_name.trim(),
         email: addForm.email.trim(),
         role: addForm.role,
-        password: addForm.password,
       });
-      toast.success('User created successfully.');
+      toast.success('Invitation email sent successfully.');
       setAddOpen(false);
       fetchUsers();
     } catch (err) {
@@ -233,7 +217,7 @@ export default function UsersPage() {
         {isAdmin && (
           <button className="btn-primary flex items-center gap-2" onClick={openAdd}>
             <Plus className="w-4 h-4" />
-            Add User
+            Invite Staff
           </button>
         )}
       </div>
@@ -381,7 +365,7 @@ export default function UsersPage() {
       )}
 
       {/* Add User Modal */}
-      <Modal isOpen={addOpen} onClose={() => setAddOpen(false)} title="Add User" size="md">
+      <Modal isOpen={addOpen} onClose={() => setAddOpen(false)} title="Invite Staff Member" size="md">
         <form onSubmit={handleAddSubmit} className="space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -428,32 +412,13 @@ export default function UsersPage() {
             </select>
             {formErrors.role && <p className="text-red-500 text-xs mt-1">{formErrors.role}</p>}
           </div>
-          <div>
-            <label className="label">Password *</label>
-            <input
-              className={`input w-full ${formErrors.password ? 'border-red-400' : ''}`}
-              type="password"
-              value={addForm.password}
-              onChange={e => setAddForm(f => ({ ...f, password: e.target.value }))}
-              placeholder="Min 8 chars, upper, lower, number"
-            />
-            {formErrors.password && <p className="text-red-500 text-xs mt-1">{formErrors.password}</p>}
-          </div>
-          <div>
-            <label className="label">Confirm Password *</label>
-            <input
-              className={`input w-full ${formErrors.confirm_password ? 'border-red-400' : ''}`}
-              type="password"
-              value={addForm.confirm_password}
-              onChange={e => setAddForm(f => ({ ...f, confirm_password: e.target.value }))}
-              placeholder="Repeat password"
-            />
-            {formErrors.confirm_password && <p className="text-red-500 text-xs mt-1">{formErrors.confirm_password}</p>}
+          <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-800">
+            The system will generate a temporary password and email the username and password to this address.
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" className="btn-secondary" onClick={() => setAddOpen(false)} disabled={submitting}>Cancel</button>
             <button type="submit" className="btn-primary" disabled={submitting}>
-              {submitting ? 'Creating...' : 'Create User'}
+              {submitting ? 'Sending...' : 'Send Invitation'}
             </button>
           </div>
         </form>

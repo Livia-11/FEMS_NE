@@ -1,6 +1,6 @@
 # TZW LTD — Fire Extinguisher Management System (FEMS)
 
-RESTful Microservices Architecture · Node.js · SQLite · JWT · Swagger/OpenAPI
+RESTful Microservices Architecture · Node.js · Postgres · JWT · Swagger/OpenAPI
 
 ---
 

@@ -1,14 +1,38 @@
 const express = require('express');
 const bcrypt  = require('bcryptjs');
+const crypto  = require('crypto');
 const { body, validationResult } = require('express-validator');
 const { pool } = require('../database');
 const { authenticate, authorize } = require('../middleware/auth');
+const { sendMail } = require('../email');
 
 const router = express.Router();
 
 function sanitize(user) {
   const { password_hash, ...safe } = user;
   return safe;
+}
+
+function generateTemporaryPassword() {
+  return `FEMS-${crypto.randomBytes(4).toString('hex')}-A1`;
+}
+
+async function sendAccountInvite({ email, firstName, role, temporaryPassword }) {
+  const loginUrl = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:5173';
+  const subject = 'TZW LTD FEMS — Account Invitation';
+  const text = `Hello ${firstName},
+
+You have been invited to the TZW LTD Fire Extinguisher Management System as a ${role}.
+
+Login URL: ${loginUrl}
+Username: ${email}
+Temporary password: ${temporaryPassword}
+
+After signing in, you can change this password from your profile.
+
+TZW LTD Fire Safety Team`;
+
+  await sendMail({ to: email, subject, text });
 }
 
 /**
@@ -115,8 +139,8 @@ router.get('/:id', authenticate, async (req, res) => {
  *   post:
  *     tags: [Users]
  *     summary: >
- *       Admin creates an Inspector or Admin account — account is immediately active,
- *       no OTP required. Regular users must self-register via POST /api/auth/register.
+ *       Admin invites an Inspector or Admin account. A temporary password is generated
+ *       and emailed to the invited user. Regular users self-register via POST /api/auth/register.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -125,17 +149,16 @@ router.get('/:id', authenticate, async (req, res) => {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [first_name, last_name, email, password, role]
+ *             required: [first_name, last_name, email, role]
  *             properties:
  *               first_name:  { type: string, example: "Alice" }
  *               last_name:   { type: string, example: "Inspector" }
  *               email:       { type: string, format: email, example: "alice@tzwltd.com" }
- *               password:    { type: string, minLength: 8, example: "Inspector@123" }
  *               role:        { type: string, enum: [admin, inspector], description: "admin or inspector only — for regular users use /api/auth/register" }
  *               phone:       { type: string }
  *               department:  { type: string }
  *     responses:
- *       201: { description: User created and immediately active }
+ *       201: { description: User invited and temporary credentials emailed }
  *       409: { description: Email already registered }
  *       422: { description: Validation errors }
  */
@@ -144,11 +167,6 @@ router.post('/', authenticate, authorize('admin'),
     body('first_name').trim().notEmpty().withMessage('First name required'),
     body('last_name').trim().notEmpty().withMessage('Last name required'),
     body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
-    body('password')
-      .isLength({ min: 8 }).withMessage('Minimum 8 characters')
-      .matches(/[A-Z]/).withMessage('Must contain uppercase')
-      .matches(/[a-z]/).withMessage('Must contain lowercase')
-      .matches(/\d/).withMessage('Must contain a number'),
     body('role')
       .isIn(['admin', 'inspector'])
       .withMessage('Admin can only create admin or inspector accounts here. Users self-register.'),
@@ -159,22 +177,33 @@ router.post('/', authenticate, authorize('admin'),
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(422).json({ errors: errors.array() });
 
-    const { first_name, last_name, email, password, role, phone, department } = req.body;
+    const { first_name, last_name, email, role, phone, department } = req.body;
 
     try {
       const existing = await pool.query('SELECT id FROM users WHERE LOWER(email)=LOWER($1)', [email]);
       if (existing.rows.length) return res.status(409).json({ error: 'Email already registered' });
 
-      const hash   = await bcrypt.hash(password, 10);
-      // Admin-created accounts are immediately active and verified
+      const temporaryPassword = generateTemporaryPassword();
+      const hash   = await bcrypt.hash(temporaryPassword, 10);
+      // Invited accounts are active and verified because the invitation is sent to the account email.
       const result = await pool.query(
         `INSERT INTO users (first_name,last_name,email,password_hash,role,is_active,email_verified,phone,department)
          VALUES ($1,$2,$3,$4,$5,TRUE,TRUE,$6,$7) RETURNING *`,
         [first_name, last_name, email, hash, role, phone || null, department || null]
       );
 
+      try {
+        await sendAccountInvite({ email, firstName: first_name, role, temporaryPassword });
+      } catch (emailErr) {
+        await pool.query('DELETE FROM users WHERE id=$1', [result.rows[0].id]);
+        console.error('[user-service] Invite email error:', emailErr.message);
+        return res.status(503).json({
+          error: 'Could not send invitation email. Please configure SMTP settings and try again.',
+        });
+      }
+
       res.status(201).json({
-        message: `${role.charAt(0).toUpperCase() + role.slice(1)} account created successfully. Account is active immediately.`,
+        message: `${role.charAt(0).toUpperCase() + role.slice(1)} invitation sent successfully.`,
         user: sanitize(result.rows[0]),
       });
     } catch (err) {

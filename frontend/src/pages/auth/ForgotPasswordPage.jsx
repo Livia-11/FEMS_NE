@@ -1,16 +1,14 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Flame, ArrowLeft, CheckCircle, Copy, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Flame, ArrowLeft, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { forgotPassword } from '../../api/auth';
 
 export default function ForgotPasswordPage() {
-  const navigate = useNavigate();
   const [email, setEmail]       = useState('');
   const [emailError, setEmailError] = useState('');
   const [loading, setLoading]   = useState(false);
   const [sent, setSent]         = useState(false);
-  const [devToken, setDevToken] = useState(null);
 
   function validate() {
     if (!email.trim()) return 'Email is required.';
@@ -25,17 +23,8 @@ export default function ForgotPasswordPage() {
     setEmailError('');
     setLoading(true);
     try {
-      const res = await forgotPassword({ email });
-      const token = res.data?.reset_token;
-
-      if (token) {
-        // Dev mode: token is returned directly — navigate to reset page immediately
-        toast.success('Dev mode: navigating to reset page with token…');
-        navigate(`/reset-password?token=${token}`);
-      } else {
-        // Production: email was sent
-        setSent(true);
-      }
+      await forgotPassword({ email });
+      setSent(true);
     } catch (err) {
       toast.error(err.message || 'Failed to send reset email.');
     } finally {

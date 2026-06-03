@@ -17,7 +17,6 @@ export default function VerifyEmailPage() {
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [countdown, setCountdown] = useState(RESEND_COUNTDOWN);
-  const [devOtp, setDevOtp] = useState(location.state?.devOtp ?? null);
   const inputRefs = useRef([]);
 
   useEffect(() => {
@@ -87,13 +86,11 @@ export default function VerifyEmailPage() {
     if (countdown > 0) return;
     setResending(true);
     try {
-      const res = await resendOtp({ email });
+      await resendOtp({ email });
       setCountdown(RESEND_COUNTDOWN);
       setDigits(Array(OTP_LENGTH).fill(''));
       inputRefs.current[0]?.focus();
       toast.success('A new OTP has been sent to your email.');
-      const otp = res.data?.otp || res.data?.dev_otp;
-      if (otp) setDevOtp(String(otp));
     } catch (err) {
       toast.error(err.message || 'Failed to resend OTP.');
     } finally {
@@ -124,12 +121,6 @@ export default function VerifyEmailPage() {
             <span className="font-medium text-gray-700">{email}</span>
           </p>
         </div>
-
-        {devOtp && (
-          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800 text-center">
-            Dev OTP: <span className="font-mono font-bold tracking-widest">{devOtp}</span>
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} noValidate>
           <div className="flex justify-center gap-2 mb-6" onPaste={handlePaste}>

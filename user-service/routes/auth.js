@@ -3,49 +3,42 @@ const express   = require('express');
 const bcrypt    = require('bcryptjs');
 const jwt       = require('jsonwebtoken');
 const crypto    = require('crypto');
-const nodemailer = require('nodemailer');
 const { body, validationResult } = require('express-validator');
 const { pool }  = require('../database');
 const { authenticate } = require('../middleware/auth');
+const { sendMail } = require('../email');
 
 const router         = express.Router();
 const JWT_SECRET     = process.env.JWT_SECRET     || 'fallback_secret';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 const OTP_MINUTES    = parseInt(process.env.OTP_EXPIRES_MINUTES || '10');
-const IS_PROD        = process.env.NODE_ENV === 'production';
-
-// ── Email transporter ──────────────────────────────────────────────────────────
-let transporter = null;
-if (process.env.SMTP_USER && process.env.SMTP_USER !== 'your_email@gmail.com') {
-  transporter = nodemailer.createTransport({
-    host:   process.env.SMTP_HOST   || 'smtp.gmail.com',
-    port:   parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-  });
-}
 
 async function sendOTPEmail(email, firstName, otp) {
   const subject = 'TZW LTD FEMS — Your Email Verification Code';
   const text    = `Hello ${firstName},\n\nYour verification code is: ${otp}\n\nThis code expires in ${OTP_MINUTES} minutes.\n\nIf you did not register, ignore this email.\n\nTZW LTD Fire Safety Team`;
 
-  if (transporter) {
-    try {
-      await transporter.sendMail({
-        from: `"${process.env.FROM_NAME || 'TZW LTD Fire Safety'}" <${process.env.FROM_EMAIL}>`,
-        to: email,
-        subject,
-        text,
-      });
-      console.log(`[user-service] OTP email sent to ${email}`);
-      return true;
-    } catch (err) {
-      console.error('[user-service] Email error:', err.message);
-    }
-  }
-  // Always log OTP to console for testing when email is not configured
-  console.log(`[user-service] OTP for ${email}: ${otp} (expires in ${OTP_MINUTES} min)`);
-  return false;
+  await sendMail({ to: email, subject, text });
+  console.log(`[user-service] OTP email sent to ${email}`);
+  return true;
+}
+
+async function sendPasswordResetEmail(email, firstName, token) {
+  const frontendUrl = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:5173';
+  const resetUrl = `${frontendUrl.replace(/\/$/, '')}/reset-password?token=${token}`;
+  const subject = 'TZW LTD FEMS — Password Reset Request';
+  const text = `Hello ${firstName},
+
+We received a request to reset your FEMS password.
+
+Reset your password here:
+${resetUrl}
+
+This link expires in 1 hour. If you did not request a password reset, ignore this email.
+
+TZW LTD Fire Safety Team`;
+
+  await sendMail({ to: email, subject, text });
+  console.log(`[user-service] Password reset email sent to ${email}`);
 }
 
 function generateOTP() {
@@ -152,15 +145,22 @@ router.post('/register',
         [user.id, otp, exp]
       );
 
-      const emailSent = await sendOTPEmail(email, first_name, otp);
+      let emailSent = false;
+      try {
+        emailSent = await sendOTPEmail(email, first_name, otp);
+      } catch (emailErr) {
+        await pool.query('DELETE FROM users WHERE id=$1', [user.id]);
+        console.error('[user-service] OTP email error:', emailErr.message);
+        return res.status(503).json({
+          error: 'Could not send OTP email. Please configure SMTP settings and try again.',
+        });
+      }
 
       const response = {
         message: `Registration successful. A 6-digit OTP has been sent to ${email}. Verify to activate your account.`,
         user_id: user.id,
         email_sent: emailSent,
       };
-      // Expose OTP in response only in non-production mode (for testing without email)
-      if (!IS_PROD) response.otp = otp;
 
       res.status(201).json(response);
     } catch (err) {
@@ -289,20 +289,27 @@ router.post('/resend-otp',
         return res.status(400).json({ error: 'Email already verified. Please login.' });
       }
 
-      // Invalidate all previous OTPs
-      await pool.query('UPDATE email_verification_otps SET verified=TRUE WHERE user_id=$1 AND verified=FALSE', [user.id]);
-
       const otp = generateOTP();
       const exp = new Date(Date.now() + OTP_MINUTES * 60 * 1000);
+      let emailSent = false;
+
+      try {
+        emailSent = await sendOTPEmail(email, user.first_name, otp);
+      } catch (emailErr) {
+        console.error('[user-service] OTP resend email error:', emailErr.message);
+        return res.status(503).json({
+          error: 'Could not send OTP email. Please configure SMTP settings and try again.',
+        });
+      }
+
+      // Invalidate previous OTPs only after the new email has been accepted.
+      await pool.query('UPDATE email_verification_otps SET verified=TRUE WHERE user_id=$1 AND verified=FALSE', [user.id]);
       await pool.query(
         'INSERT INTO email_verification_otps (user_id,otp,expires_at) VALUES ($1,$2,$3)',
         [user.id, otp, exp]
       );
 
-      const emailSent = await sendOTPEmail(email, user.first_name, otp);
-
       const response = { message: `New OTP sent to ${email}.`, email_sent: emailSent };
-      if (!IS_PROD) response.otp = otp;
 
       res.json(response);
     } catch (err) {
@@ -429,9 +436,17 @@ router.post('/forgot-password',
         [user.id, token, exp]
       );
 
-      console.log(`[user-service] Password reset token for ${email}: ${token}`);
+      try {
+        await sendPasswordResetEmail(email, user.first_name, token);
+      } catch (emailErr) {
+        await pool.query('DELETE FROM password_reset_tokens WHERE token=$1', [token]);
+        console.error('[user-service] Password reset email error:', emailErr.message);
+        return res.status(503).json({
+          error: 'Could not send password reset email. Please configure SMTP settings and try again.',
+        });
+      }
+
       const response = { message: 'If that email is registered, a reset link has been sent.' };
-      if (!IS_PROD) response.reset_token = token;
 
       res.json(response);
     } catch (err) {

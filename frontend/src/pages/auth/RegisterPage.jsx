@@ -54,15 +54,14 @@ export default function RegisterPage() {
     setErrors({});
     setLoading(true);
     try {
-      const res = await registerApi({
+      await registerApi({
         first_name: form.first_name,
         last_name: form.last_name,
         email: form.email,
         password: form.password,
       });
       toast.success('Check your email for an OTP to verify your account.');
-      const devOtp = res.data?.otp || res.data?.dev_otp;
-      navigate('/verify-email', { state: { email: form.email, devOtp } });
+      navigate('/verify-email', { state: { email: form.email } });
     } catch (err) {
       toast.error(err.message || 'Registration failed.');
     } finally {

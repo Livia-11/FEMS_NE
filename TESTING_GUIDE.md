@@ -88,10 +88,10 @@ Content-Type: application/json
 
 ---
 
-## STEP 3 — Admin Creates an Inspector
+## STEP 3 — Admin Invites an Inspector
 
-**Requirement:** Admin registers inspectors. Inspectors cannot self-register.  
-Admin-created accounts are immediately active (no OTP needed).
+**Requirement:** Admin invites inspectors. Inspectors cannot self-register.  
+The system generates a temporary password and emails the username/password to the inspector.
 
 **Test:**
 ```
@@ -103,7 +103,6 @@ Content-Type: application/json
   "first_name": "Alice",
   "last_name":  "Inspector",
   "email":      "alice.inspector@tzwltd.com",
-  "password":   "Inspect@123",
   "role":       "inspector",
   "department": "Fire Safety"
 }
@@ -112,15 +111,15 @@ Content-Type: application/json
 **Expected response:**
 ```json
 {
-  "message": "Inspector account created successfully. Account is active immediately.",
+  "message": "Inspector invitation sent successfully.",
   "user": { "role": "inspector", "is_active": true, "email_verified": true }
 }
 ```
 
 **Verify:**
-- `is_active: true` — no OTP required
-- `email_verified: true` — admin-created accounts bypass verification
-- Inspector can log in immediately
+- `is_active: true` and `email_verified: true`
+- Inspector receives an email containing username and temporary password
+- Inspector can log in with the temporary password and later change it from Profile
 
 ---
 
@@ -133,7 +132,7 @@ Content-Type: application/json
 
 {
   "email":    "alice.inspector@tzwltd.com",
-  "password": "Inspect@123"
+  "password": "<temporary_password_from_email>"
 }
 ```
 
@@ -163,12 +162,12 @@ Content-Type: application/json
 {
   "message": "Registration successful. A 6-digit OTP has been sent...",
   "user_id": 5,
-  "otp":     "382741"
+  "email_sent": true
 }
 ```
 
-> **Note:** `otp` appears in the response only in development mode (`NODE_ENV=development`).  
-> In production, it is only sent by email. The OTP is also printed to the service console.
+> **Note:** OTP codes are no longer returned by the API or printed to the console.  
+> Configure SMTP in `.env`, then read the OTP from the user's real email inbox.
 
 **Verify:** User cannot log in yet (account inactive until OTP verified).
 
