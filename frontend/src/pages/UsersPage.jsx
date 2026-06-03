@@ -226,10 +226,10 @@ export default function UsersPage() {
   const totalPages = Math.ceil(total / limit) || 1;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-navy-900">User Management</h1>
+        <h1 className="text-2xl font-bold text-slate-800">User Management</h1>
         {isAdmin && (
           <button className="btn-primary flex items-center gap-2" onClick={openAdd}>
             <Plus className="w-4 h-4" />
@@ -382,7 +382,7 @@ export default function UsersPage() {
 
       {/* Add User Modal */}
       <Modal isOpen={addOpen} onClose={() => setAddOpen(false)} title="Add User" size="md">
-        <form onSubmit={handleAddSubmit} className="space-y-4">
+        <form onSubmit={handleAddSubmit} className="space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">First Name *</label>
@@ -461,7 +461,7 @@ export default function UsersPage() {
 
       {/* Edit User Modal */}
       <Modal isOpen={editOpen} onClose={() => setEditOpen(false)} title="Edit User" size="md">
-        <form onSubmit={handleEditSubmit} className="space-y-4">
+        <form onSubmit={handleEditSubmit} className="space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">First Name *</label>

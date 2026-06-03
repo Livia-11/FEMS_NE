@@ -129,13 +129,13 @@ export default function ProfilePage() {
   const displayUser = accountInfo || user;
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold text-navy-900">My Profile</h1>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold text-slate-800">My Profile</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Section 1: Profile Information */}
-        <div className="card space-y-5">
-          <div className="flex items-center gap-3 border-b pb-4">
+        <div className="card p-6 space-y-5">
+          <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
             <User className="w-5 h-5 text-fire-600" />
             <h2 className="text-lg font-semibold text-slate-800">Profile Information</h2>
           </div>
@@ -195,8 +195,8 @@ export default function ProfilePage() {
         </div>
 
         {/* Section 2: Change Password */}
-        <div className="card space-y-5">
-          <div className="flex items-center gap-3 border-b pb-4">
+        <div className="card p-6 space-y-5">
+          <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
             <KeyRound className="w-5 h-5 text-fire-600" />
             <h2 className="text-lg font-semibold text-slate-800">Change Password</h2>
           </div>
@@ -251,8 +251,8 @@ export default function ProfilePage() {
       </div>
 
       {/* Account Information */}
-      <div className="card space-y-4">
-        <h2 className="text-lg font-semibold text-slate-800 border-b pb-4">Account Information</h2>
+      <div className="card p-6 space-y-4">
+        <h2 className="text-lg font-semibold text-slate-800 border-b border-slate-100 pb-4">Account Information</h2>
         {infoLoading ? (
           <div className="flex justify-center py-6">
             <LoadingSpinner />

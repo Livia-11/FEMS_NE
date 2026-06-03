@@ -446,7 +446,7 @@ export default function InspectionsPage() {
 
       {/* ── Modal A: Schedule Inspection ────────────────────────────────────── */}
       <Modal isOpen={scheduleOpen} onClose={() => setScheduleOpen(false)} title="Schedule Inspection" size="lg">
-        <form onSubmit={handleScheduleSubmit} className="space-y-4">
+        <form onSubmit={handleScheduleSubmit} className="space-y-5">
           <div>
             <label className="label">Extinguisher <span className="text-red-500">*</span></label>
             <select
@@ -534,7 +534,7 @@ export default function InspectionsPage() {
 
       {/* ── Modal B: Update Results ──────────────────────────────────────────── */}
       <Modal isOpen={updateOpen} onClose={() => setUpdateOpen(false)} title="Update Inspection Results" size="lg">
-        <form onSubmit={handleUpdateSubmit} className="space-y-4">
+        <form onSubmit={handleUpdateSubmit} className="space-y-5">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Status</label>

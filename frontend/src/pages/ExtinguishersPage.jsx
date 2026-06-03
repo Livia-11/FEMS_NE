@@ -488,7 +488,7 @@ export default function ExtinguishersPage() {
         title={editTarget ? 'Edit Extinguisher' : 'Add Extinguisher'}
         size="lg"
       >
-        <form onSubmit={handleFormSubmit} className="space-y-4">
+        <form onSubmit={handleFormSubmit} className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Serial Number */}
             <div>

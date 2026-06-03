@@ -392,7 +392,7 @@ export default function MaintenancePage() {
         title={isEditing ? 'Edit Maintenance Log' : 'Log Maintenance'}
         size="xl"
       >
-        <form onSubmit={handleFormSubmit} className="space-y-4">
+        <form onSubmit={handleFormSubmit} className="space-y-5">
           {/* Row 1 */}
           <div>
             <label className="label">Extinguisher <span className="text-red-500">*</span></label>
