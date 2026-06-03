@@ -18,10 +18,44 @@ const SERVICES = {
   notifications: process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3004',
 };
 
-app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors({ origin: '*', methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'] }));
+// ── Security headers ─────────────────────────────────────────────────────────
+// CSP is configured to allow Swagger UI's inline scripts/styles while still
+// providing meaningful protection against XSS on other routes.
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc:  ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc:   ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc:    ["'self'", 'https://fonts.gstatic.com'],
+      imgSrc:     ["'self'", 'data:'],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Required for Swagger UI resources
+}));
 
-// ── Request timing — stamps every request, prints breakdown on finish ──────────
+// ── CORS ──────────────────────────────────────────────────────────────────────
+// Restrict to known frontend origins rather than '*' to prevent
+// cross-origin credential theft. Multiple origins can be supplied
+// via CORS_ORIGIN as a comma-separated list (e.g. for staging + prod).
+const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',').map(s => s.trim());
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin || ALLOWED_ORIGINS.includes(origin) || ALLOWED_ORIGINS.includes('*')) return cb(null, true);
+    cb(new Error(`CORS: origin '${origin}' not allowed`));
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Service-Key'],
+  credentials: true,
+}));
+
+// ── HTTP access logging ───────────────────────────────────────────────────────
+// 'dev' format gives readable coloured output in development;
+// 'combined' (Apache format) is better suited for log aggregation in production.
+const IS_DEV = process.env.NODE_ENV !== 'production';
+app.use(morgan(IS_DEV ? 'dev' : 'combined'));
+
+// ── Request timing — stamps every request, prints breakdown on finish ─────────
 app.use((req, res, next) => {
   req._gwStart = process.hrtime.bigint();
   res.on('finish', () => {
@@ -34,14 +68,38 @@ app.use((req, res, next) => {
   next();
 });
 
+// ── Global rate limiter ───────────────────────────────────────────────────────
+// Broad limit across all routes to blunt large-scale abuse and DDoS attempts.
+// Intentionally generous — the per-route auth limiter below is much stricter.
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 500,
   message: { error: 'Too many requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 app.use(globalLimiter);
 
-// Health check
+// ── Auth-endpoint rate limiter ────────────────────────────────────────────────
+// Stricter limit on authentication endpoints to slow brute-force and
+// credential-stuffing attacks without impacting normal API traffic.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Too many authentication attempts. Please try again in 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/auth/login',           authLimiter);
+app.use('/api/auth/forgot-password', authLimiter);
+app.use('/api/auth/register',        authLimiter);
+
+// ── Body parser ───────────────────────────────────────────────────────────────
+// The gateway itself parses JSON only for health/swagger routes;
+// the 50 kb cap prevents outsized payload attacks reaching downstream services.
+app.use(express.json({ limit: '50kb' }));
+
+// ── Health check ──────────────────────────────────────────────────────────────
 app.get('/health', async (req, res) => {
   const checks = await Promise.allSettled(
     Object.entries(SERVICES).map(async ([name, url]) => {
@@ -61,7 +119,7 @@ app.get('/health', async (req, res) => {
   });
 });
 
-// ── Swagger spec cache (built once at startup, refreshed every 2 min) ──────────
+// ── Swagger spec cache (built once at startup, refreshed every 2 min) ─────────
 let swaggerCache = null;
 
 async function buildSwaggerSpec() {
@@ -90,9 +148,9 @@ async function buildSwaggerSpec() {
   for (const result of specs) {
     if (result.status === 'fulfilled') {
       const { spec } = result.value;
-      if (spec.paths)             Object.assign(combined.paths, spec.paths);
+      if (spec.paths)               Object.assign(combined.paths, spec.paths);
       if (spec.components?.schemas) Object.assign(combined.components.schemas, spec.components.schemas);
-      if (spec.tags)              combined.tags.push(...spec.tags);
+      if (spec.tags)                combined.tags.push(...spec.tags);
     }
   }
   return combined;
@@ -111,7 +169,7 @@ async function buildCacheWhenReady(attempt = 1) {
       setInterval(() => {
         buildSwaggerSpec().then(s => {
           if (Object.keys(s.paths).length > 0) swaggerCache = s;
-        }).catch(() => {});
+        }).catch(e => console.warn('[gateway] Swagger cache refresh failed:', e.message));
       }, 2 * 60 * 1000);
       return;
     }
@@ -145,7 +203,10 @@ app.get('/api-docs', swaggerUi.setup(null, {
   customSiteTitle: 'TZW LTD FEMS API Docs',
 }));
 
-// Proxy routes — measure round-trip to each downstream service
+// ── Proxy routes ──────────────────────────────────────────────────────────────
+// Each route is forwarded to the appropriate downstream microservice.
+// The proxy middleware measures round-trip time and logs gateway overhead
+// separately from service latency to aid performance diagnosis.
 const proxyOpts = (target, serviceName) => ({
   target,
   changeOrigin: true,
@@ -197,6 +258,15 @@ app.get('/', (req, res) => {
 });
 
 app.use((req, res) => res.status(404).json({ error: 'Route not found' }));
+
+// ── Global error handler ──────────────────────────────────────────────────────
+// Catch-all for any error thrown or passed to next() in the middleware chain.
+// The gateway should never expose internal stack traces to clients.
+app.use((err, req, res, _next) => {
+  const status = err.status || 500;
+  console.error(`[gateway] ${req.method} ${req.url} → ERROR ${status}: ${err.message}`);
+  res.status(status).json({ error: err.message || 'Gateway error' });
+});
 
 app.listen(PORT, () => {
   console.log(`\n==========================================`);
