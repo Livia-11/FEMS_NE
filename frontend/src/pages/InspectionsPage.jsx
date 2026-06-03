@@ -73,8 +73,9 @@ function formatDate(dateStr) {
 }
 
 export default function InspectionsPage() {
-  const { isAdmin, isInspector } = useAuth();
-  const canWrite   = isAdmin || isInspector;
+  const { user, isAdmin, isInspector } = useAuth();
+  const canSchedule = isAdmin || user?.role === 'user';
+  const canUpdate = isAdmin || isInspector;
   const canDelete  = isAdmin;
 
   // ── list state ──────────────────────────────────────────────────────────
@@ -133,14 +134,16 @@ export default function InspectionsPage() {
 
   // ── fetch dropdown data ──────────────────────────────────────────────────
   useEffect(() => {
-    if (!canWrite) return;
+    if (!canSchedule && !canUpdate) return;
     listExtinguishers({ limit: 100 })
       .then(r => setExtinguishers(r.data?.data ?? []))
       .catch(() => {});
-    listInspectors()
-      .then(r => setInspectors(r.data?.data ?? []))
-      .catch(() => {});
-  }, [canWrite]);
+    if (isAdmin) {
+      listInspectors()
+        .then(r => setInspectors(r.data?.data ?? []))
+        .catch(() => {});
+    }
+  }, [canSchedule, canUpdate, isAdmin]);
 
   // ── reset page on filter change ──────────────────────────────────────────
   useEffect(() => { setPage(1); }, [filterStatus, filterFrom, filterTo, filterSerial]);
@@ -157,18 +160,19 @@ export default function InspectionsPage() {
     e.preventDefault();
     if (!scheduleForm.extinguisher_id) return toast.error('Select an extinguisher');
     if (!scheduleForm.scheduled_date)   return toast.error('Select a scheduled date');
+    if (isAdmin && !scheduleForm.inspector_id) return toast.error('Assign an inspector');
     setSubmitting(true);
     try {
       const payload = {
         extinguisher_id: scheduleForm.extinguisher_id,
         scheduled_date:  scheduleForm.scheduled_date,
         ...(scheduleForm.scheduled_time  && { scheduled_time:  scheduleForm.scheduled_time }),
-        ...(scheduleForm.inspector_id    && { inspector_id:    scheduleForm.inspector_id }),
-        ...(scheduleForm.inspector_name  && { inspector_name:  scheduleForm.inspector_name }),
+        ...(isAdmin && scheduleForm.inspector_id && { inspector_id: scheduleForm.inspector_id }),
+        ...(isAdmin && scheduleForm.inspector_name && { inspector_name: scheduleForm.inspector_name }),
         ...(scheduleForm.notes           && { notes:           scheduleForm.notes }),
       };
       await createInspection(payload);
-      toast.success('Inspection scheduled');
+      toast.success(isAdmin ? 'Inspection assigned to inspector' : 'Inspection request scheduled');
       setScheduleOpen(false);
       fetchInspections();
     } catch (err) {
@@ -192,6 +196,15 @@ export default function InspectionsPage() {
       notes:           insp.notes         ?? '',
     });
     setUpdateOpen(true);
+  }
+
+  function inspectorName(inspector) {
+    return [inspector.first_name, inspector.last_name].filter(Boolean).join(' ') || inspector.email;
+  }
+
+  function canUpdateInspection(insp) {
+    if (isAdmin) return true;
+    return isInspector && insp.inspector_id === user?.id;
   }
 
   async function handleUpdateSubmit(e) {
@@ -281,13 +294,13 @@ export default function InspectionsPage() {
               Mark Overdue
             </button>
           )}
-          {canWrite && (
+          {canSchedule && (
             <button
               onClick={openSchedule}
               className="btn-primary flex items-center gap-2 text-sm"
             >
               <Plus className="h-4 w-4" />
-              Schedule Inspection
+              {isAdmin ? 'Assign Inspection' : 'Schedule Inspection'}
             </button>
           )}
         </div>
@@ -388,7 +401,7 @@ export default function InspectionsPage() {
                         >
                           <Eye className="h-4 w-4" />
                         </button>
-                        {canWrite && (
+                        {canUpdateInspection(insp) && (
                           <button
                             onClick={() => openUpdate(insp)}
                             className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
@@ -445,7 +458,7 @@ export default function InspectionsPage() {
       </div>
 
       {/* ── Modal A: Schedule Inspection ────────────────────────────────────── */}
-      <Modal isOpen={scheduleOpen} onClose={() => setScheduleOpen(false)} title="Schedule Inspection" size="lg">
+      <Modal isOpen={scheduleOpen} onClose={() => setScheduleOpen(false)} title={isAdmin ? 'Assign Inspection' : 'Schedule Inspection'} size="lg">
         <form onSubmit={handleScheduleSubmit} className="space-y-5">
           <div>
             <label className="label">Extinguisher <span className="text-red-500">*</span></label>
@@ -484,30 +497,27 @@ export default function InspectionsPage() {
             </div>
           </div>
 
-          <div>
-            <label className="label">Assign Inspector</label>
-            <select
-              className="input w-full"
-              value={scheduleForm.inspector_id}
-              onChange={e => setScheduleForm(f => ({ ...f, inspector_id: e.target.value, inspector_name: '' }))}
-            >
-              <option value="">— Select from inspectors list —</option>
-              {inspectors.map(u => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {!scheduleForm.inspector_id && (
+          {isAdmin && (
             <div>
-              <label className="label">Inspector Name (manual)</label>
-              <input
-                type="text"
+              <label className="label">Assign Inspector <span className="text-red-500">*</span></label>
+              <select
                 className="input w-full"
-                placeholder="Enter inspector name"
-                value={scheduleForm.inspector_name}
-                onChange={e => setScheduleForm(f => ({ ...f, inspector_name: e.target.value }))}
-              />
+                value={scheduleForm.inspector_id}
+                onChange={e => {
+                  const selectedInspector = inspectors.find(i => String(i.id) === e.target.value);
+                  setScheduleForm(f => ({
+                    ...f,
+                    inspector_id: e.target.value,
+                    inspector_name: selectedInspector ? inspectorName(selectedInspector) : '',
+                  }));
+                }}
+                required
+              >
+                <option value="">— Select inspector —</option>
+                {inspectors.map(u => (
+                  <option key={u.id} value={u.id}>{inspectorName(u)}</option>
+                ))}
+              </select>
             </div>
           )}
 

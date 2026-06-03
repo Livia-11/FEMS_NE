@@ -297,7 +297,7 @@ router.get('/compliance', authenticate, async (req, res) => {
  *       200:
  *         description: Maintenance history and statistics
  */
-router.get('/maintenance', authenticate, async (req, res) => {
+router.get('/maintenance', authenticate, authorize('admin', 'inspector'), async (req, res) => {
   try {
     const token = fwdToken(req);
     const { from_date, to_date } = req.query;
@@ -308,7 +308,7 @@ router.get('/maintenance', authenticate, async (req, res) => {
     const logs = await getExt('/api/maintenance', token, params);
     const data = logs.data || [];
 
-    const totalCost = data.reduce((s, r) => s + (r.cost || 0), 0);
+    const totalCost = data.reduce((sum, record) => sum + Number(record.cost || 0), 0);
     const byExtinguisher = {};
     for (const r of data) {
       byExtinguisher[r.extinguisher_id] = (byExtinguisher[r.extinguisher_id] || 0) + 1;
@@ -393,6 +393,10 @@ router.get('/dashboard', authenticate, async (req, res) => {
 router.get('/export/pdf', authenticate, async (req, res) => {
   const { type = 'inventory' } = req.query;
   const token = fwdToken(req);
+
+  if (type === 'maintenance' && !['admin', 'inspector'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Maintenance reports require admin or inspector role' });
+  }
 
   try {
     let reportData;
@@ -490,6 +494,10 @@ router.get('/export/pdf', authenticate, async (req, res) => {
 router.get('/export/csv', authenticate, async (req, res) => {
   const { type = 'extinguishers' } = req.query;
   const token = fwdToken(req);
+
+  if (type === 'maintenance' && !['admin', 'inspector'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Maintenance reports require admin or inspector role' });
+  }
 
   let endpoint, filename;
   if (type === 'extinguishers') {

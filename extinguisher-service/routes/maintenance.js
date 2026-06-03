@@ -42,8 +42,8 @@ const router = express.Router();
  *     responses:
  *       200: { description: Paginated maintenance logs }
  */
-router.get('/', authenticate, async (req, res) => {
-  const { extinguisher_id, inspector_id, from_date, to_date, page = 1, limit = 20 } = req.query;
+router.get('/', authenticate, authorize('admin', 'inspector'), async (req, res) => {
+  const { extinguisher_id, inspector_id, from_date, to_date, serial_number, page = 1, limit = 20 } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   const conditions = [];
@@ -54,6 +54,7 @@ router.get('/', authenticate, async (req, res) => {
   if (inspector_id)    { conditions.push(`m.inspector_id = $${idx++}`);           params.push(inspector_id); }
   if (from_date)       { conditions.push(`m.date_of_maintenance >= $${idx++}`);  params.push(from_date); }
   if (to_date)         { conditions.push(`m.date_of_maintenance <= $${idx++}`);  params.push(to_date); }
+  if (serial_number)   { conditions.push(`e.serial_number ILIKE $${idx++}`);     params.push(`%${serial_number}%`); }
 
   if (req.user.role === 'inspector') {
     conditions.push(`m.inspector_id = $${idx++}`);
@@ -61,7 +62,12 @@ router.get('/', authenticate, async (req, res) => {
   }
 
   const wc    = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-  const total = parseInt((await pool.query(`SELECT COUNT(*) FROM maintenance_logs m ${wc}`, params)).rows[0].count);
+  const total = parseInt((await pool.query(`
+    SELECT COUNT(*)
+    FROM maintenance_logs m
+    LEFT JOIN extinguishers e ON e.id = m.extinguisher_id
+    ${wc}
+  `, params)).rows[0].count);
 
   params.push(parseInt(limit), offset);
   const data  = await pool.query(`
@@ -90,7 +96,7 @@ router.get('/', authenticate, async (req, res) => {
  *     responses:
  *       200: { description: Log details }
  */
-router.get('/:id', authenticate, async (req, res) => {
+router.get('/:id', authenticate, authorize('admin', 'inspector'), async (req, res) => {
   const result = await pool.query(`
     SELECT m.*, e.serial_number, e.location, e.type, e.size
     FROM maintenance_logs m
@@ -98,6 +104,9 @@ router.get('/:id', authenticate, async (req, res) => {
     WHERE m.id = $1
   `, [req.params.id]);
   if (!result.rows.length) return res.status(404).json({ error: 'Maintenance log not found' });
+  if (req.user.role === 'inspector' && result.rows[0].inspector_id !== req.user.id) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
   res.json({ data: result.rows[0] });
 });
 
@@ -220,6 +229,10 @@ router.put('/:id', authenticate, authorize('admin', 'inspector'),
     const existing = await pool.query('SELECT * FROM maintenance_logs WHERE id=$1', [req.params.id]);
     if (!existing.rows.length) return res.status(404).json({ error: 'Maintenance log not found' });
     const m = existing.rows[0];
+
+    if (req.user.role === 'inspector' && m.inspector_id !== req.user.id) {
+      return res.status(403).json({ error: 'Inspectors can only update maintenance logs assigned to them' });
+    }
 
     const fields = ['action_taken','date_of_maintenance','issues_identified','parts_replaced',
                     'cost','next_service_date','notes'];

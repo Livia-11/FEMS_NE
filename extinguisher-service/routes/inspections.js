@@ -76,6 +76,9 @@ router.get('/', authenticate, async (req, res) => {
   if (req.user.role === 'inspector') {
     conditions.push(`i.inspector_id = $${idx++}`);
     params.push(req.user.id);
+  } else if (req.user.role === 'user') {
+    conditions.push(`i.created_by = $${idx++}`);
+    params.push(req.user.id);
   }
 
   const wc    = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -116,6 +119,13 @@ router.get('/:id', authenticate, async (req, res) => {
     WHERE i.id = $1
   `, [req.params.id]);
   if (!result.rows.length) return res.status(404).json({ error: 'Inspection not found' });
+  const inspection = result.rows[0];
+  if (req.user.role === 'inspector' && inspection.inspector_id !== req.user.id) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  if (req.user.role === 'user' && inspection.created_by !== req.user.id) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
   res.json({ data: result.rows[0] });
 });
 
@@ -144,7 +154,7 @@ router.get('/:id', authenticate, async (req, res) => {
  *     responses:
  *       201: { description: Inspection scheduled }
  */
-router.post('/', authenticate,
+router.post('/', authenticate, authorize('admin', 'user'),
   [
     body('extinguisher_id').isInt({ min: 1 }),
     body('scheduled_date').isDate(),
@@ -162,12 +172,15 @@ router.post('/', authenticate,
       const ext = await pool.query('SELECT * FROM extinguishers WHERE id=$1', [extinguisher_id]);
       if (!ext.rows.length) return res.status(404).json({ error: 'Extinguisher not found' });
 
+      const assignedInspectorId = req.user.role === 'admin' ? inspector_id : null;
+      const assignedInspectorName = req.user.role === 'admin' ? inspector_name : null;
+
       const result = await pool.query(`
         INSERT INTO inspections
           (extinguisher_id,inspector_id,inspector_name,scheduled_date,scheduled_time,notes,created_by)
         VALUES ($1,$2,$3,$4,$5,$6,$7)
         RETURNING *
-      `, [extinguisher_id, inspector_id||null, inspector_name||null,
+      `, [extinguisher_id, assignedInspectorId||null, assignedInspectorName||null,
           scheduled_date, scheduled_time||null, notes||null, req.user.id]);
 
       await pool.query('UPDATE extinguishers SET next_inspection=$1,updated_at=NOW() WHERE id=$2',
@@ -234,6 +247,17 @@ router.put('/:id', authenticate, authorize('admin', 'inspector'),
     const existing = await pool.query('SELECT * FROM inspections WHERE id=$1', [req.params.id]);
     if (!existing.rows.length) return res.status(404).json({ error: 'Inspection not found' });
     const ins = existing.rows[0];
+
+    if (req.user.role === 'inspector' && ins.inspector_id !== req.user.id) {
+      return res.status(403).json({ error: 'Inspectors can only update inspections assigned to them' });
+    }
+
+    if (req.user.role === 'inspector') {
+      delete req.body.scheduled_date;
+      delete req.body.scheduled_time;
+      delete req.body.inspector_id;
+      delete req.body.inspector_name;
+    }
 
     const fields = ['scheduled_date','scheduled_time','actual_date','inspector_id','inspector_name',
                     'status','result','pressure_ok','seal_intact','label_readable','pin_in_place','notes'];

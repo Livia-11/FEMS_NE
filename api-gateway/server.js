@@ -38,7 +38,10 @@ app.use(helmet({
 // Restrict to known frontend origins rather than '*' to prevent
 // cross-origin credential theft. Multiple origins can be supplied
 // via CORS_ORIGIN as a comma-separated list (e.g. for staging + prod).
-const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',').map(s => s.trim());
+const ALLOWED_ORIGINS = Array.from(new Set([
+  ...(process.env.CORS_ORIGIN || 'http://localhost:5173').split(',').map(s => s.trim()).filter(Boolean),
+  `http://localhost:${PORT}`,
+]));
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin || ALLOWED_ORIGINS.includes(origin) || ALLOWED_ORIGINS.includes('*')) return cb(null, true);

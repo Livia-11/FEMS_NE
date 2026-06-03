@@ -130,6 +130,10 @@ export default function MaintenancePage() {
     return `${ext.serial_number}${loc}`;
   }
 
+  function inspectorName(inspector) {
+    return [inspector.first_name, inspector.last_name].filter(Boolean).join(' ') || inspector.email;
+  }
+
   // ── add / edit ─────────────────────────────────────────────────────────────
   function openAdd() {
     setIsEditing(false);
@@ -456,7 +460,7 @@ export default function MaintenancePage() {
               >
                 <option value="">— Select inspector —</option>
                 {inspectors.map(u => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
+                  <option key={u.id} value={u.id}>{inspectorName(u)}</option>
                 ))}
               </select>
             </div>

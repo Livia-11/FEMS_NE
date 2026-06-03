@@ -108,6 +108,25 @@ router.get('/', authenticate, authorize('admin'), async (req, res) => {
 
 /**
  * @swagger
+ * /api/users/inspectors/list:
+ *   get:
+ *     tags: [Users]
+ *     summary: List all active inspectors (for inspection scheduling dropdowns)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200: { description: Inspector list }
+ */
+router.get('/inspectors/list', authenticate, async (req, res) => {
+  const result = await pool.query(
+    `SELECT id,first_name,last_name,email,department
+     FROM users WHERE role='inspector' AND is_active=TRUE ORDER BY first_name`
+  );
+  res.json({ data: result.rows });
+});
+
+/**
+ * @swagger
  * /api/users/{id}:
  *   get:
  *     tags: [Users]
@@ -361,25 +380,6 @@ router.patch('/:id/activate', authenticate, authorize('admin'), async (req, res)
   );
   if (!r.rows.length) return res.status(404).json({ error: 'User not found' });
   res.json({ message: 'User activated' });
-});
-
-/**
- * @swagger
- * /api/users/inspectors/list:
- *   get:
- *     tags: [Users]
- *     summary: List all active inspectors (for inspection scheduling dropdowns)
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200: { description: Inspector list }
- */
-router.get('/inspectors/list', authenticate, async (req, res) => {
-  const result = await pool.query(
-    `SELECT id,first_name,last_name,email,department
-     FROM users WHERE role='inspector' AND is_active=TRUE ORDER BY first_name`
-  );
-  res.json({ data: result.rows });
 });
 
 /**

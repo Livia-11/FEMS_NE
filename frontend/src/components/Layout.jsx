@@ -15,7 +15,7 @@ const NAV_ITEMS = [
   { label: 'Extinguishers',to: '/extinguishers', icon: Flame,           roles: ['admin', 'inspector', 'user'] },
   { label: 'Inspections',  to: '/inspections',   icon: ClipboardList,   roles: ['admin', 'inspector', 'user'] },
   { label: 'Maintenance',  to: '/maintenance',   icon: Wrench,          roles: ['admin', 'inspector'] },
-  { label: 'Reports',      to: '/reports',       icon: BarChart2,       roles: ['admin', 'inspector', 'user'] },
+  { label: 'Reports',      to: '/reports',       icon: BarChart2,       roles: ['admin', 'inspector'] },
   { label: 'Users',        to: '/users',         icon: Users,           roles: ['admin'] },
 ];
 
