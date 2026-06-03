@@ -1,0 +1,33 @@
+{
+  "name": "fems",
+  "version": "1.0.0",
+  "description": "Fire Extinguisher Management System - TZW LTD",
+  "scripts": {
+    "start": "concurrently --names \"GATEWAY,USERS,EXTINGUISHERS,REPORTS,NOTIFY,UI\" --prefix-colors \"cyan,green,yellow,blue,magenta,white\" \"npm run start:gateway\" \"npm run start:users\" \"npm run start:extinguishers\" \"npm run start:reports\" \"npm run start:notifications\" \"npm run start:frontend\"",
+    "start:frontend": "cd frontend && npm run dev",
+    "start:gateway": "cd api-gateway && node server.js",
+    "start:users": "cd user-service && node server.js",
+    "start:extinguishers": "cd extinguisher-service && node server.js",
+    "start:reports": "cd reporting-service && node server.js",
+    "start:notifications": "cd notification-service && node server.js",
+    "dev": "concurrently --names \"GATEWAY,USERS,EXTINGUISHERS,REPORTS,NOTIFY\" --prefix-colors \"cyan,green,yellow,blue,magenta\" \"npm run dev:gateway\" \"npm run dev:users\" \"npm run dev:extinguishers\" \"npm run dev:reports\" \"npm run dev:notifications\"",
+    "dev:gateway": "cd api-gateway && nodemon server.js",
+    "dev:users": "cd user-service && nodemon server.js",
+    "dev:extinguishers": "cd extinguisher-service && nodemon server.js",
+    "dev:reports": "cd reporting-service && nodemon server.js",
+    "dev:notifications": "cd notification-service && nodemon server.js",
+    "install:all": "npm install && cd api-gateway && npm install && cd ../user-service && npm install && cd ../extinguisher-service && npm install && cd ../reporting-service && npm install && cd ../notification-service && npm install && cd ../frontend && npm install",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop ecosystem.config.js",
+    "pm2:restart": "pm2 restart ecosystem.config.js",
+    "pm2:logs": "pm2 logs"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.0.2"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "pg": "^8.21.0"
+  }
+}
