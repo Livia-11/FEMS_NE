@@ -11,7 +11,12 @@ client.interceptors.request.use(cfg => {
 client.interceptors.response.use(
   res => res,
   err => {
-    const msg = err.response?.data?.error || err.response?.data?.message || 'Something went wrong';
+    // Extract message from: { error }, { message }, or { errors: [{msg},...] } (express-validator 422)
+    const data = err.response?.data;
+    const msg  = data?.error
+              || data?.message
+              || (Array.isArray(data?.errors) ? data.errors.map(e => e.msg).join('. ') : null)
+              || 'Something went wrong';
     if (err.response?.status === 401) {
       // Clear stored credentials without a page reload.
       // AuthContext listens for this event and clears React state,
