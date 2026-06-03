@@ -334,7 +334,7 @@ router.post('/resend-otp',
  *             required: [email, password]
  *             properties:
  *               email:    { type: string, example: "kireziliva@gmail.com" }
- *               password: { type: string, example: "Admin@123456" }
+ *               password: { type: string, example: "Admin@123" }
  *     responses:
  *       200: { description: Login successful }
  *       401: { description: Invalid credentials }

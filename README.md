@@ -85,8 +85,8 @@ node seed.js
 ## Default Admin Credentials
 
 ```
-Email:    admin@tzwltd.com
-Password: Admin@123456
+Email:    kireziliva@gmail.com
+Password: Admin@123
 ```
 
 ---

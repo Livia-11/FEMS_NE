@@ -97,8 +97,8 @@ async function sendNotification(token, data) {
 async function main() {
   console.log('\nTZW LTD FEMS - Seeding demo data\n');
 
-  const adminEmail = process.env.DEFAULT_ADMIN_EMAIL || 'admin@tzwltd.com';
-  const adminPassword = process.env.DEFAULT_ADMIN_PASSWORD || 'Admin@123456';
+  const adminEmail = process.env.DEFAULT_ADMIN_EMAIL || 'kireziliva@gmail.com';
+  const adminPassword = process.env.DEFAULT_ADMIN_PASSWORD || 'Admin@123';
 
   const john = await ensureUser({
     first_name: 'John',

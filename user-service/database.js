@@ -65,7 +65,7 @@ async function initDb() {
 
   // Admin account is pre-verified and active — no OTP needed
   const adminEmail = process.env.DEFAULT_ADMIN_EMAIL || 'kireziliva@gmail.com';
-  const adminPass  = process.env.DEFAULT_ADMIN_PASSWORD || 'Admin@123456';
+  const adminPass  = process.env.DEFAULT_ADMIN_PASSWORD || 'Admin@123';
   const exists     = await pool.query('SELECT id FROM users WHERE LOWER(email)=LOWER($1)', [adminEmail]);
   if (!exists.rows.length) {
     const hash = await bcrypt.hash(adminPass, 10);
